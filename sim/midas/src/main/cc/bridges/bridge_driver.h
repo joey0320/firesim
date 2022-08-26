@@ -5,6 +5,14 @@
 
 #include "simif.h"
 
+namespace BridgeConstants {
+// Logically, Bridge streams are latency-insensitive FIFOs with a width of
+// this many bytes.
+// The host-implementation may use a different width under-the-hood but this
+// should not be exposed to bridge developers.
+constexpr int STREAM_WIDTH_BYTES = 64;
+} // namespace BridgeConstants
+
 // DOC include start: Bridge Driver Interface
 /**
  * @brief Base class for Bridge Drivers
