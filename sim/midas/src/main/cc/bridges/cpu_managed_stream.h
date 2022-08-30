@@ -5,6 +5,19 @@
 
 #include <functional>
 #include <string>
+
+class ToCPUStream {
+public:
+  virtual size_t pull(void *dest, size_t num_bytes, size_t required_bytes) = 0;
+  virtual void flush() = 0;
+};
+
+class FromCPUStream {
+public:
+  virtual size_t push(void *src, size_t num_bytes, size_t required_bytes) = 0;
+  virtual void flush() = 0;
+};
+
 /**
  * @brief Parameters emitted for a CPU-managed stream emitted by Golden Gate.
  *
@@ -65,14 +78,17 @@ public:
  * implemented with pcis_read, and is provided by the host-platform.
  *
  */
-class StreamToCPU : public CPUManagedStream {
+class StreamToCPU : public CPUManagedStream, public ToCPUStream {
 public:
   StreamToCPU(CPUManagedStreamParameters params,
               std::function<uint32_t(size_t)> mmio_read,
               std::function<size_t(size_t, char *, size_t)> pcis_read)
       : CPUManagedStream(params, mmio_read), pcis_read(pcis_read){};
 
-  size_t pull(void *dest, size_t num_bytes, size_t required_bytes);
+  virtual size_t pull(void *dest, size_t num_bytes, size_t required_bytes);
+  // The CPU-managed stream engine makes all beats available to the bridge,
+  // hence the NOP.
+  virtual void flush(){};
 
 private:
   std::function<size_t(size_t, char *, size_t)> pcis_read;
@@ -85,14 +101,16 @@ private:
  * FPGA out of a user-provided buffer. IO over a CPU-mastered AXI4 IF is
  * implemented with pcis_write, and is provided by the host-platform.
  */
-class StreamFromCPU : public CPUManagedStream {
+class StreamFromCPU : public CPUManagedStream, public FromCPUStream {
 public:
   StreamFromCPU(CPUManagedStreamParameters params,
                 std::function<uint32_t(size_t)> mmio_read,
                 std::function<size_t(size_t, char *, size_t)> pcis_write)
       : CPUManagedStream(params, mmio_read), pcis_write(pcis_write){};
 
-  size_t push(void *src, size_t num_bytes, size_t required_bytes);
+  virtual size_t push(void *src, size_t num_bytes, size_t required_bytes);
+  // On a push all beats are delivered to the FPGA, so a NOP is sufficient here.
+  virtual void flush(){};
 
 private:
   std::function<size_t(size_t, char *, size_t)> pcis_write;

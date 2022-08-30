@@ -31,6 +31,10 @@ public:
                       void *src,
                       size_t num_bytes,
                       size_t threshold_bytes);
+
+  virtual void pull_flush(unsigned int stream_no);
+  virtual void push_flush(unsigned int stream_no);
+
   /**
    * @brief Pointers to inter-context (i.e., between VCS/verilator and driver)
    * AXI4 transaction channels
@@ -74,8 +78,8 @@ private:
   // Writes directly into the host DRAM models to initialize them.
   void load_mems(const char *fname);
 
-  std::vector<StreamToCPU> to_host_streams;
-  std::vector<StreamFromCPU> from_host_streams;
+  std::vector<std::unique_ptr<ToCPUStream>> to_host_streams;
+  std::vector<std::unique_ptr<FromCPUStream>> from_host_streams;
 };
 
 #endif // __SIMIF_EMUL_H
