@@ -47,6 +47,13 @@ void handle_sigterm(int sig) { finish(); }
 
 simif_emul_t::simif_emul_t() {
 
+#ifdef FPGA_MANAGED_AXI4_PRESENT
+  // The final parameter, line size, is not used under mm_magic_t
+  cpu_mem->init((1ULL << FPGA_MANAGED_AXI4_ADDR_BITS),
+                FPGA_MANAGED_AXI4_DATA_BITS / 8,
+                512);
+#endif
+
   using namespace std::placeholders;
   auto mmio_read_func = std::bind(&simif_emul_t::read, this, _1);
   auto pcis_read_func = std::bind(&simif_emul_t::pcis_read, this, _1, _2, _3);
@@ -214,7 +221,7 @@ size_t simif_emul_t::pcis_read(size_t addr, char *data, size_t size) {
   while (len >= 0) {
     size_t part_len = len % (MAX_LEN + 1);
 
-    dma->read_req(addr, DMA_SIZE, part_len);
+    dma->read_req(addr, log2(DMA_BEAT_BYTES), part_len);
     wait_read(dma, data);
 
     len -= (part_len + 1);
@@ -241,7 +248,7 @@ size_t simif_emul_t::pcis_write(size_t addr, char *data, size_t size) {
   while (len >= 0) {
     size_t part_len = len % (MAX_LEN + 1);
 
-    dma->write_req(addr, DMA_SIZE, part_len, data, strb_ptr);
+    dma->write_req(addr, log2(DMA_BEAT_BYTES), part_len, data, strb_ptr);
     wait_write(dma);
 
     len -= (part_len + 1);
