@@ -3,6 +3,7 @@
 #ifndef __SIMIF_EMUL_H
 #define __SIMIF_EMUL_H
 
+#include <memory>
 #include <vector>
 
 #include "bridges/cpu_managed_stream.h"
@@ -78,8 +79,8 @@ private:
   // Writes directly into the host DRAM models to initialize them.
   void load_mems(const char *fname);
 
-  std::vector<std::unique_ptr<ToCPUStream>> to_host_streams;
-  std::vector<std::unique_ptr<FromCPUStream>> from_host_streams;
+  std::vector<std::unique_ptr<FPGAToCPUStreamDriver>> fpga_to_cpu_streams;
+  std::vector<std::unique_ptr<CPUToFPGAStreamDriver>> cpu_to_fpga_streams;
 };
 
 #endif // __SIMIF_EMUL_H

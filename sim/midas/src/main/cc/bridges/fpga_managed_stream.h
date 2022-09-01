@@ -1,19 +1,21 @@
-#ifndef __FPGA_MANAGED_STREAM_H
-#define __FPGA_MANAGED_STREAM_H
+#ifndef __BRIDGES_FPGA_MANAGED_STREAM_H
+#define __BRIDGES_FPGA_MANAGED_STREAM_H
 
 // See LICENSE for license details.
 
 #include <functional>
+#include <string>
 
-#include "cpu_managed_stream.h"
+#include "bridge_stream_driver.h"
 
+namespace FPGAManagedStreams {
 /**
  * @brief Parameters emitted for a FPGA-managed stream emitted by Golden Gate.
  *
  * This will be replaced by a protobuf-derived class, and re-used across both
  * Scala and C++.
  */
-typedef struct FPGAManagedStreamParameters {
+typedef struct StreamParameters {
   std::string stream_name;
   uint32_t buffer_capacity;
   uint64_t toHostPhysAddrHighAddr;
@@ -24,15 +26,15 @@ typedef struct FPGAManagedStreamParameters {
   uint64_t toHostStreamFlushAddr;
   uint64_t toHostStreamFlushDoneAddr;
 
-  FPGAManagedStreamParameters(std::string stream_name,
-                              uint32_t buffer_capacity,
-                              uint64_t toHostPhysAddrHighAddr,
-                              uint64_t toHostPhysAddrLowAddr,
-                              uint64_t bytesAvailableAddr,
-                              uint64_t bytesConsumedAddr,
-                              uint64_t toHostStreamDoneInitAddr,
-                              uint64_t toHostStreamFlushAddr,
-                              uint64_t toHostStreamFlushDoneAddr)
+  StreamParameters(std::string stream_name,
+                   uint32_t buffer_capacity,
+                   uint64_t toHostPhysAddrHighAddr,
+                   uint64_t toHostPhysAddrLowAddr,
+                   uint64_t bytesAvailableAddr,
+                   uint64_t bytesConsumedAddr,
+                   uint64_t toHostStreamDoneInitAddr,
+                   uint64_t toHostStreamFlushAddr,
+                   uint64_t toHostStreamFlushDoneAddr)
       : stream_name(stream_name), buffer_capacity(buffer_capacity),
         toHostPhysAddrHighAddr(toHostPhysAddrHighAddr),
         toHostPhysAddrLowAddr(toHostPhysAddrLowAddr),
@@ -41,7 +43,7 @@ typedef struct FPGAManagedStreamParameters {
         toHostStreamDoneInitAddr(toHostStreamDoneInitAddr),
         toHostStreamFlushAddr(toHostStreamFlushAddr),
         toHostStreamFlushDoneAddr(toHostStreamFlushDoneAddr){};
-} FPGAManagedStreamParameters;
+} StreamParameters;
 
 /**
  * @brief Implements streams sunk by the driver (sourced by the FPGA)
@@ -51,27 +53,23 @@ typedef struct FPGAManagedStreamParameters {
  * implemented with pcis_read, and is provided by the host-platform.
  *
  */
-class FPGAManagedStreamToCPU : public ToCPUStream {
+class FPGAToCPUDriver : public FPGAToCPUStreamDriver {
 public:
-  FPGAManagedStreamToCPU(
-      FPGAManagedStreamParameters params,
-      void *buffer_base,
-      std::function<uint32_t(size_t)> mmio_read,
-      std::function<void(size_t, uint32_t)> mmio_write
-      //) : params(params), buffer_base(buffer_base), mmio_read_func(mmio_read),
-      // mmio_write_func(mmio_write) {};
-      )
+  FPGAToCPUDriver(StreamParameters params,
+                  void *buffer_base,
+                  std::function<uint32_t(size_t)> mmio_read,
+                  std::function<void(size_t, uint32_t)> mmio_write)
       : params(params), buffer_base(buffer_base), mmio_read_func(mmio_read),
         mmio_write_func(mmio_write){};
 
-  virtual size_t pull(void *dest, size_t num_bytes, size_t required_bytes);
-  virtual void flush();
+  size_t pull(void *dest, size_t num_bytes, size_t required_bytes) override;
+  void flush() override;
 
   size_t mmio_read(size_t addr) { return mmio_read_func(addr); };
   void mmio_write(size_t addr, uint32_t data) { mmio_write_func(addr, data); };
 
 private:
-  FPGAManagedStreamParameters params;
+  StreamParameters params;
   void *buffer_base;
   std::function<uint32_t(size_t)> mmio_read_func;
   std::function<void(size_t, uint32_t)> mmio_write_func;
@@ -80,4 +78,6 @@ private:
   int buffer_offset = 0;
 };
 
-#endif // __FPGA_MANAGED_STREAM_H
+} // namespace FPGAManagedStreams
+
+#endif // __BRIDGES_FPGA_MANAGED_STREAM_H

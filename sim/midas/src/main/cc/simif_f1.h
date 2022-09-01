@@ -39,7 +39,7 @@ private:
   char out_buf[CTRL_BEAT_BYTES];
 
   std::vector<StreamToCPU> to_host_streams;
-  std::vector<StreamFromCPU> from_host_streams;
+  std::vector<CPUManagedCPUToFPGAStream> from_host_streams;
 
   size_t pcis_write(size_t addr, char *data, size_t size);
   size_t pcis_read(size_t addr, char *data, size_t size);

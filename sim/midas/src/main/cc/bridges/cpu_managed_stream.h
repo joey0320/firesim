@@ -1,42 +1,33 @@
 // See LICENSE for license details.
 
-#ifndef __CPU_MANAGED_STREAM_H
-#define __CPU_MANAGED_STREAM_H
+#ifndef __BRIDGES_CPU_MANAGED_STREAM_H
+#define __BRIDGES_CPU_MANAGED_STREAM_H
 
 #include <functional>
 #include <string>
 
-class ToCPUStream {
-public:
-  virtual size_t pull(void *dest, size_t num_bytes, size_t required_bytes) = 0;
-  virtual void flush() = 0;
-};
+#include "bridge_stream_driver.h"
 
-class FromCPUStream {
-public:
-  virtual size_t push(void *src, size_t num_bytes, size_t required_bytes) = 0;
-  virtual void flush() = 0;
-};
-
+namespace CPUManagedStreams {
 /**
  * @brief Parameters emitted for a CPU-managed stream emitted by Golden Gate.
  *
  * This will be replaced by a protobuf-derived class, and re-used across both
  * Scala and C++.
  */
-typedef struct CPUManagedStreamParameters {
+typedef struct StreamParameters {
   std::string stream_name;
   uint64_t dma_addr;
   uint64_t count_addr;
   uint32_t fpga_buffer_size;
 
-  CPUManagedStreamParameters(std::string stream_name,
-                             uint64_t dma_addr,
-                             uint64_t count_addr,
-                             int fpga_buffer_size)
+  StreamParameters(std::string stream_name,
+                   uint64_t dma_addr,
+                   uint64_t count_addr,
+                   int fpga_buffer_size)
       : stream_name(stream_name), dma_addr(dma_addr), count_addr(count_addr),
         fpga_buffer_size(fpga_buffer_size){};
-} CPUManagedStreamParameters;
+} StreamParameters;
 
 /**
  * @brief Base class for CPU-managed streams
@@ -52,14 +43,14 @@ typedef struct CPUManagedStreamParameters {
  * for their platform.
  *
  */
-class CPUManagedStream {
+class CPUManagedDriver {
 public:
-  CPUManagedStream(CPUManagedStreamParameters params,
+  CPUManagedDriver(StreamParameters params,
                    std::function<uint32_t(size_t)> mmio_read_func)
       : params(params), mmio_read_func(mmio_read_func){};
 
 private:
-  CPUManagedStreamParameters params;
+  StreamParameters params;
   std::function<uint32_t(size_t)> mmio_read_func;
 
 public:
@@ -73,22 +64,23 @@ public:
 /**
  * @brief Implements streams sunk by the driver (sourced by the FPGA)
  *
- * Extends CPUManagedStream to provide a pull method, which moves data from the
+ * Extends CPUManagedDriver to provide a pull method, which moves data from the
  * FPGA into a user-provided buffer. IO over a CPU-mastered AXI4 IF is
  * implemented with pcis_read, and is provided by the host-platform.
  *
  */
-class StreamToCPU : public CPUManagedStream, public ToCPUStream {
+class FPGAToCPUDriver : public CPUManagedDriver, public FPGAToCPUStreamDriver {
 public:
-  StreamToCPU(CPUManagedStreamParameters params,
-              std::function<uint32_t(size_t)> mmio_read,
-              std::function<size_t(size_t, char *, size_t)> pcis_read)
-      : CPUManagedStream(params, mmio_read), pcis_read(pcis_read){};
+  FPGAToCPUDriver(StreamParameters params,
+                  std::function<uint32_t(size_t)> mmio_read,
+                  std::function<size_t(size_t, char *, size_t)> pcis_read)
+      : CPUManagedDriver(params, mmio_read), pcis_read(pcis_read){};
 
-  virtual size_t pull(void *dest, size_t num_bytes, size_t required_bytes);
+  virtual size_t
+  pull(void *dest, size_t num_bytes, size_t required_bytes) override;
   // The CPU-managed stream engine makes all beats available to the bridge,
   // hence the NOP.
-  virtual void flush(){};
+  virtual void flush() override{};
 
 private:
   std::function<size_t(size_t, char *, size_t)> pcis_read;
@@ -97,23 +89,26 @@ private:
 /**
  * @brief Implements streams sourced by the driver (sunk by the FPGA)
  *
- * Extends CPUManagedStream to provide a push method, which moves data to the
+ * Extends CPUManagedDriver to provide a push method, which moves data to the
  * FPGA out of a user-provided buffer. IO over a CPU-mastered AXI4 IF is
  * implemented with pcis_write, and is provided by the host-platform.
  */
-class StreamFromCPU : public CPUManagedStream, public FromCPUStream {
+class CPUToFPGADriver : public CPUManagedDriver, public CPUToFPGAStreamDriver {
 public:
-  StreamFromCPU(CPUManagedStreamParameters params,
-                std::function<uint32_t(size_t)> mmio_read,
-                std::function<size_t(size_t, char *, size_t)> pcis_write)
-      : CPUManagedStream(params, mmio_read), pcis_write(pcis_write){};
+  CPUToFPGADriver(StreamParameters params,
+                  std::function<uint32_t(size_t)> mmio_read,
+                  std::function<size_t(size_t, char *, size_t)> pcis_write)
+      : CPUManagedDriver(params, mmio_read), pcis_write(pcis_write){};
 
-  virtual size_t push(void *src, size_t num_bytes, size_t required_bytes);
+  virtual size_t
+  push(void *src, size_t num_bytes, size_t required_bytes) override;
   // On a push all beats are delivered to the FPGA, so a NOP is sufficient here.
-  virtual void flush(){};
+  virtual void flush() override{};
 
 private:
   std::function<size_t(size_t, char *, size_t)> pcis_write;
 };
 
-#endif // __CPU_MANAGED_STREAM_H
+} // namespace CPUManagedStreams
+
+#endif // __BRIDGES_CPU_MANAGED_STREAM_H

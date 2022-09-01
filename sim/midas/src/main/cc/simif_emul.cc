@@ -10,7 +10,6 @@
 #include <verilated_vcd_c.h>
 #endif
 #endif
-#include <memory>
 #include <signal.h>
 
 #include "bridges/cpu_managed_stream.h"
@@ -65,31 +64,33 @@ simif_emul_t::simif_emul_t() {
   auto pcis_write_func = std::bind(&simif_emul_t::pcis_write, this, _1, _2, _3);
 
   for (size_t i = 0; i < CPUMANAGEDSTREAMENGINE_0_from_cpu_stream_count; i++) {
-    auto params = CPUManagedStreamParameters(
+    auto params = CPUManagedStreams::StreamParameters(
         std::string(CPUMANAGEDSTREAMENGINE_0_from_cpu_names[i]),
         CPUMANAGEDSTREAMENGINE_0_from_cpu_dma_addrs[i],
         CPUMANAGEDSTREAMENGINE_0_from_cpu_count_addrs[i],
         CPUMANAGEDSTREAMENGINE_0_from_cpu_buffer_sizes[i]);
 
-    from_host_streams.push_back(std::make_unique<StreamFromCPU>(
-        params, mmio_read_func, pcis_write_func));
+    cpu_to_fpga_streams.push_back(
+        std::make_unique<CPUManagedStreams::CPUToFPGADriver>(
+            params, mmio_read_func, pcis_write_func));
   }
 
   for (size_t i = 0; i < CPUMANAGEDSTREAMENGINE_0_to_cpu_stream_count; i++) {
-    auto params = CPUManagedStreamParameters(
+    auto params = CPUManagedStreams::StreamParameters(
         std::string(CPUMANAGEDSTREAMENGINE_0_to_cpu_names[i]),
         CPUMANAGEDSTREAMENGINE_0_to_cpu_dma_addrs[i],
         CPUMANAGEDSTREAMENGINE_0_to_cpu_count_addrs[i],
         CPUMANAGEDSTREAMENGINE_0_to_cpu_buffer_sizes[i]);
 
-    to_host_streams.push_back(
-        std::make_unique<StreamToCPU>(params, mmio_read_func, pcis_read_func));
+    fpga_to_cpu_streams.push_back(
+        std::make_unique<CPUManagedStreams::FPGAToCPUDriver>(
+            params, mmio_read_func, pcis_read_func));
   }
 #endif // CPUMANAGEDSTREAMENGINE_0_PRESENT
 #ifdef FPGAMANAGEDSTREAMENGINE_0_PRESENT
-  auto driver_buffer_ptr = ((char *)pcim->get_data());
+  auto driver_buffer_ptr = ((char *)cpu_mem->get_data());
   for (size_t i = 0; i < FPGAMANAGEDSTREAMENGINE_0_to_cpu_stream_count; i++) {
-    auto params = FPGAManagedStreamParameters(
+    auto params = FPGAManagedStreams::StreamParameters(
         std::string(FPGAMANAGEDSTREAMENGINE_0_to_cpu_names[i]),
         FPGAMANAGEDSTREAMENGINE_0_to_cpu_fpgaBufferDepth[i],
         FPGAMANAGEDSTREAMENGINE_0_to_cpu_toHostPhysAddrHighAddrs[i],
@@ -100,8 +101,12 @@ simif_emul_t::simif_emul_t() {
         FPGAMANAGEDSTREAMENGINE_0_to_cpu_toHostStreamFlushAddrs[i],
         FPGAMANAGEDSTREAMENGINE_0_to_cpu_toHostStreamFlushDoneAddrs[i]);
 
-    to_host_streams.push_back(std::make_unique<FPGAManagedStreamToCPU>(
-        params, (void *)driver_buffer_ptr, mmio_read_func, mmio_write_func));
+    fpga_to_cpu_streams.push_back(
+        std::make_unique<FPGAManagedStreams::FPGAToCPUDriver>(
+            params,
+            (void *)driver_buffer_ptr,
+            mmio_read_func,
+            mmio_write_func));
     driver_buffer_ptr += params.buffer_capacity;
   }
 
@@ -227,8 +232,8 @@ size_t simif_emul_t::pull(unsigned stream_idx,
                           void *dest,
                           size_t num_bytes,
                           size_t threshold_bytes) {
-  assert(stream_idx < to_host_streams.size());
-  return this->to_host_streams[stream_idx]->pull(
+  assert(stream_idx < fpga_to_cpu_streams.size());
+  return this->fpga_to_cpu_streams[stream_idx]->pull(
       dest, num_bytes, threshold_bytes);
 }
 
@@ -236,19 +241,19 @@ size_t simif_emul_t::push(unsigned stream_idx,
                           void *src,
                           size_t num_bytes,
                           size_t threshold_bytes) {
-  assert(stream_idx < from_host_streams.size());
-  return this->from_host_streams[stream_idx]->push(
+  assert(stream_idx < cpu_to_fpga_streams.size());
+  return this->cpu_to_fpga_streams[stream_idx]->push(
       src, num_bytes, threshold_bytes);
 }
 
 void simif_emul_t::pull_flush(unsigned stream_idx) {
-  assert(stream_idx < to_host_streams.size());
-  return this->to_host_streams[stream_idx]->flush();
+  assert(stream_idx < fpga_to_cpu_streams.size());
+  return this->fpga_to_cpu_streams[stream_idx]->flush();
 }
 
 void simif_emul_t::push_flush(unsigned stream_idx) {
-  assert(stream_idx < from_host_streams.size());
-  return this->from_host_streams[stream_idx]->flush();
+  assert(stream_idx < cpu_to_fpga_streams.size());
+  return this->cpu_to_fpga_streams[stream_idx]->flush();
 }
 
 size_t simif_emul_t::pcis_read(size_t addr, char *data, size_t size) {

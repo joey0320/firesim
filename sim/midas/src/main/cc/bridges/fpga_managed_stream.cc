@@ -14,9 +14,9 @@
  * would be dequeued, dequeue none and return 0.
  * @return size_t Number of bytes successfully dequeued
  */
-size_t FPGAManagedStreamToCPU::pull(void *dest,
-                                    size_t num_bytes,
-                                    size_t required_bytes) {
+size_t FPGAManagedStreams::FPGAToCPUDriver::pull(void *dest,
+                                                 size_t num_bytes,
+                                                 size_t required_bytes) {
   assert(num_bytes >= required_bytes);
   size_t bytes_in_buffer = this->mmio_read(this->params.bytesAvailableAddr);
   if (bytes_in_buffer < required_bytes) {
@@ -30,10 +30,6 @@ size_t FPGAManagedStreamToCPU::pull(void *dest,
           : bytes_in_buffer;
   std::memcpy(dest, src_addr, first_copy_bytes);
   if (first_copy_bytes < bytes_in_buffer) {
-    printf("Secondary memcopy dst %x, src: %x, bytes_in_buffer: %d\n",
-           (char *)dest + first_copy_bytes,
-           buffer_base,
-           bytes_in_buffer - first_copy_bytes);
     std::memcpy((char *)dest + first_copy_bytes,
                 buffer_base,
                 bytes_in_buffer - first_copy_bytes);
@@ -44,12 +40,11 @@ size_t FPGAManagedStreamToCPU::pull(void *dest,
   return bytes_in_buffer;
 }
 
-void FPGAManagedStreamToCPU::flush() {
+void FPGAManagedStreams::FPGAToCPUDriver::flush() {
   this->mmio_write(this->params.toHostStreamFlushAddr, 1);
   // TODO: Consider if this should be made non blocking // alternate API
   auto flush_done = false;
   while (!flush_done) {
     flush_done = (this->mmio_read(this->params.toHostStreamFlushDoneAddr) & 1);
-    fprintf(stderr, "Flush in progress? %d\n", flush_done);
   }
 }
