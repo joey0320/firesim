@@ -30,6 +30,7 @@ private[passes] object PreLinkRenaming extends firrtl.Transform {
   }) map updateInsts(nameMap)
 
   def execute(state: CircuitState): CircuitState = {
+    println("PreLinkRenaming pass started")
     val childNamespace = state.annotations.collectFirst({ case PreLinkRenamingAnnotation(ns) => ns }).get
     val circuit = state.circuit
     require(!childNamespace.contains(circuit.main), "Submodule in child has same name as parent's top")
@@ -45,6 +46,8 @@ private[passes] object PreLinkRenaming extends firrtl.Transform {
     }).toMap)
 
     renameMap.setCircuit(circuit.main)
+
+    println("PreLinkRenaming done")
 
     state.copy(circuit = circuit.copy(modules = circuit.modules map updateModNames(namePairs.toMap)),
                renames = Some(renameMap))
